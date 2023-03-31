@@ -1,0 +1,6 @@
+GATE_NUMBER = ''
+ALLOWED_CALLERS = {
+    'phone number': 'Contact name'
+}
+# Must be part of ALLOWED_CALLERS
+OWNER_NUMBER = ''

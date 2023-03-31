@@ -1,0 +1,13 @@
+phone_numbers.py
+*.pyc
+src/__pycache__
+src/lib
+*backups*
+*.svg
+*_autosave*
+state.json
+.vscode
+.picowgo
+my.index.html
+src/index.html
+my.phone_numbers.py

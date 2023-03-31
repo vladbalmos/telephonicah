@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telephonicah</title>
+    <style>
+        body {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            font-family: Arial, sans-serif;
+        }
+        header {
+            text-align: center;
+        }
+        input[type="text"], select {
+            margin-bottom: 5px;
+        }
+        .row {
+            display: flex;
+            justify-content: space-around;
+            padding: 1rem;
+            box-sizing: border-box;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            margin-bottom: 0.5rem;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+        }
+        .delete-icon {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            position: relative;
+            text-decoration: none;
+        }
+        .delete-icon:before,
+        .delete-icon:after {
+            content: '';
+            display: block;
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background-color: red;
+            top: 50%;
+            left: 0;
+        }
+        .delete-icon:before {
+            transform: rotate(45deg);
+        }
+        .delete-icon:after {
+            transform: rotate(-45deg);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Telephonicah - Admin area</h1>
+    </header>
+    <div class="row">
+        <div>
+            <h2>Team</h2>
+            <form method="post" action="/update?allowed=1" id="allowed-callers-form">
+                <ul id="allowed-callers">
+                    {allowed_callers}
+                </ul>
+                
+                <button id="save-list-btn" type="submit" style="display: none">Save</button>
+            </form>
+            <h2>Add member</h2>
+            <form id="add-caller-form">
+                <input required type="text" id="name" name="name" placeholder="Nume">
+                <br>
+                <input required type="text" id="phone" name="phone" placeholder="Telefon">
+                <br>
+                <button type="submit">Add</button>
+            </form>
+            
+            <h2>Change admin number</h2>
+            <form id="change-owner-form" method="post" action="/update?owner=1">
+                <input type="hidden" id="current-owner" value="{current_owner}">
+                <select name="owner" id="owner">
+                </select>
+                <br>
+                <button type="submit">Save</button>
+            </form>
+            
+            <h2>Change designated call number</h2>
+            <form method="post" action="/update?gate=1">
+                <input type="text" name="gate" value="{gate}">
+                <br>
+                <button type="submit">Save</button>
+            </form>
+        </div>
+        <div style="width: 60%">
+            <h2>Logs</h2>
+            <textarea id="logs">{logs}</textarea>
+            <form method="post" action="/update?check:credit=1">
+                <button type="submit">Check prepay credit</button>
+            </form>
+        </div>
+    </div>
+    <script>
+        document.getElementById('add-caller-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const nameInput = document.getElementById('name');
+            const name = nameInput.value.trim();
+            
+            const phoneInput = document.getElementById('phone');
+            const phone = phoneInput.value.trim();
+
+            if (name && phone) {
+                const newItem = document.createElement('li');
+                newItem.id = phone;
+                newItem.innerHTML = `${phone} - ${name} <input type="hidden" name="name[]" value="${name}"><input type="hidden" name="phone[]" value="${phone}"> <a href="#" rel="${phone}" class="delete-icon" title="Șterge"></a>`;
+                document.getElementById('allowed-callers').appendChild(newItem);
+
+                nameInput.value = '';
+                phoneInput.value = '';
+                document.getElementById('save-list-btn').style.display = 'block';
+            }
+        });
+
+        document.getElementById('allowed-callers-form').addEventListener('click', (e) =>{
+            const target = e.srcElement;
+            let deleteIconClicked = false;
+            for (const c of target.classList) {
+                if (c == 'delete-icon') {
+                    deleteIconClicked = true;
+                    break;
+                }
+            }
+            
+            if (!deleteIconClicked) {
+                return;
+            }
+            
+            
+            e.preventDefault();
+            const targetId = target.getAttribute('rel');
+            
+            document.getElementById(targetId).remove();
+            document.getElementById('save-list-btn').style.display = 'block';
+        })
+        
+        const allowedCallersList = document.getElementById('allowed-callers');
+        const ownerSelectEl = document.getElementById('owner');
+        const currentOwner = document.getElementById('current-owner').value;
+
+        for (const child of allowedCallersList.children) {
+            const phone = child.getAttribute('id');
+            const option = document.createElement('option');
+            option.value = phone;
+            option.textContent = child.textContent;
+            
+            if (currentOwner === phone) {
+                option.setAttribute('selected', true);
+            }
+            
+            ownerSelectEl.appendChild(option);
+        }
+        
+
+        const textarea = document.getElementById('logs');
+        textarea.scrollTop = textarea.scrollHeight;
+    </script>
+</body>
+</html>
