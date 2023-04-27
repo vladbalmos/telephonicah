@@ -21,7 +21,7 @@ Features:
         * connect to wifi
         * query wifi status
     * Relay received SMS to designated owner number
-    * Web interface
+    * Web UI
 
 # System requirements
 * micropython
@@ -61,3 +61,11 @@ Upload
 Build
 
     make build
+    
+# Hardware todos:
+
+* power input
+* power switch
+* usb input for firmware update & debugging
+* connector for incoming call enable pin
+* antenna cut-out
