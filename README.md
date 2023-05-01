@@ -61,11 +61,3 @@ Upload
 Build
 
     make build
-    
-# Hardware todos:
-
-* power input
-* power switch
-* usb input for firmware update & debugging
-* connector for incoming call enable pin
-* antenna cut-out
