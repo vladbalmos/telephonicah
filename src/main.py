@@ -41,7 +41,7 @@ available_commands = [
     'get:credit',
     'delete:sms',
     'reset:sim',
-    'clear:state'
+    'clear:state',
     'wifi:status',
     'wifi:connect\nssid\npassword'
 ]
@@ -272,7 +272,7 @@ async def main():
                     msg = f'Unable to connect to wifi: {error_code}'
                     
                 if not wifi_status_sms_sent:
-                    # asyncio.create_task(sim800l.send_sms_with_lock(state['owner_number'], msg))
+                    asyncio.create_task(sim800l.send_sms_with_lock(state['owner_number'], msg))
                     wifi_status_sms_sent = True
             else:
                 continue
