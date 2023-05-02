@@ -179,6 +179,7 @@ async def main():
                     if msg_from_owner:
                         msg = event['data'][2]
                         msg = '\n'.join(msg[1:])
+                        original_msg = msg
                         if msg:
                             msg = msg.lower().strip()
                         if msg == 'help:':
@@ -207,7 +208,7 @@ async def main():
                             asyncio.create_task(sim800l.send_sms_with_lock(state['owner_number'], msg))
                         elif 'wifi:connect' in msg:
                             await sim800l.delete_sms(event['index'])
-                            segments = msg.split('\n')
+                            segments = original_msg.strip().split('\n')
                             if len(segments) != 3:
                                 continue
                             
