@@ -244,7 +244,7 @@ async def main():
             if cmd['do'] == 'update-allowed-callers':
                 new_dict = {}
                 for name, number in cmd['payload']:
-                    new_dict[name] = number
+                    new_dict[number] = name
                 state['allowed_callers'] = new_dict
                 state_modified = True
             elif cmd['do'] == 'update-gate-number':

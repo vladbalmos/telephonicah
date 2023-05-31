@@ -167,7 +167,7 @@ async def serve_index(method, _headers, _query, _body):
         with open('index.html', 'r') as file:
             allowed_callers = []
             for phone, name in state['allowed_callers'].items():
-                item = f'<li id={phone}>{phone} - {name} <input type="hidden" name="name[]" value="{name}"><input type="hidden" name="phone[]" value="{phone}"> <a href="#" rel="{phone}" class="delete-icon" title="Șterge"></a></li>'
+                item = f'<li id="{phone}">{phone} - {name} <input type="hidden" name="name[]" value="{name}"><input type="hidden" name="phone[]" value="{phone}"> <a href="#" rel="{phone}" class="delete-icon" title="Șterge"></a></li>'
                 allowed_callers.append(item)
 
             unique_log_items = {}
