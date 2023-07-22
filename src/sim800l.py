@@ -1,4 +1,6 @@
 import uasyncio as asyncio
+import time
+import os
 from dynamic_queue import Queue
 
 SLEEP_MS = 50
@@ -25,6 +27,9 @@ outgoing_operation_in_progress = False
 
 first_ring_event = asyncio.Event()
 first_ring_event.set()
+
+gate_ring_ok = False
+gate_last_urc = None
 
 last_state = {
     'network': None,
@@ -141,32 +146,84 @@ async def check_credit():
 async def call_gate(number, caller):
     global outgoing_call_in_progress
     global callee
+    global gate_ring_ok
 
     first_ring_event.clear()
 
     outgoing_call_in_progress = True
     callee = number
 
-    device_queue.put_nowait({'event': 'outgoing-event'})
-    await sleep(10)
-    call_cmd_status, call_status, call_result = await send(f'ATD{number};')
-
-    if call_status != 'OK':
-        first_ring_event.set()
-        return await send_sms(caller, f'Unable to call gate. Reason {call_cmd_status}, {call_status}, {str(call_result)}')
+    max_retries = 3
+    retry_counter = 0
+    
+    failed_message = None
+    log_messages = [f'Starting gate {number} call procedure for {caller}']
 
     try:
-        await asyncio.wait_for(first_ring_event.wait(), 10)
-        await sleep(500)
-        _, _, result = await send('ATH', timeout=2, expect_single_line_response=False)
-        await handle_call_ending(result)
+        
+        while True:
+            if retry_counter >= max_retries:
+                log_messages.append(f'{time.ticks_ms()} Reached retry limit. Calling failed')
+                break
+
+            device_queue.put_nowait({'event': 'outgoing-event'})
+            log_messages.append(f'{time.ticks_ms()} Calling gate')
+            call_cmd_status, call_status, call_result = await send(f'ATD{number};')
+            
+            if call_status != 'OK':
+                retry_counter += 1
+                first_ring_event.set()
+                failed_message = f'Unable to call gate. Reason {call_cmd_status}, {call_status}, {str(call_result)}'
+                log_messages.append(f'{time.ticks_ms()} Calling failed: {failed_message}')
+                await sleep()
+                continue
+
+            log_messages.append(f'{time.ticks_ms()} Waiting for first ring')
+            await asyncio.wait_for(first_ring_event.wait(), 30)
+            await sleep(500)
+
+            log_messages.append(f'{time.ticks_ms()} Last URC: {gate_last_urc}')
+            
+            if gate_ring_ok:
+                log_messages.append(f'{time.ticks_ms()} Gate response is OK. Canceling ringing')
+                print("Gate response is OK")
+                _, _, result = await send('ATH', timeout=2, expect_single_line_response=False)
+                await handle_call_ending(result)
+                gate_ring_ok = False
+                failed_message = None
+                break
+            
+            log_messages.append(f'{time.ticks_ms()} Gate response is invalid. Retrying')
+
+            retry_counter += 1
+            print("Gate response is invalid. Retrying...")
     except asyncio.TimeoutError:
         first_ring_event.set()
+        log_messages.append(f'{time.ticks_ms()} Timeout occured while waiting to first ring');
         print('Timeout occured while waiting to first ring')
+        failed_message = 'Timeout occured while waiting for first ring'
         debug_queue.put_nowait({'event': 'error', 'msg': 'Timeout occured while waiting for first ring'})
-        await send_sms(caller, 'Timeout occured while waiting for gate first ring')
     finally:
         outgoing_call_in_progress = False
+
+    if failed_message:
+        try:
+            fail_log_stats = os.stat('fail.log')
+            print(f"Fail log size is: {fail_log_stats[6]}")
+            if int(fail_log_stats[6]) > (32 * 1000):
+                print("Deleting fail log")
+                os.remove('fail.log')
+        except:
+            pass
+
+        try:
+            with open('fail.log', 'a') as fail_log:
+                for msg in log_messages:
+                    fail_log.write(f"{msg}\n")
+                fail_log.write("\n")
+        except Exception as e:
+            print(f"Failed to write log file: {str(e)}")
+        await send_sms(caller, failed_message)
 
 async def open_gate(gate_number, caller):
     global outgoing_operation_in_progress
@@ -253,12 +310,16 @@ async def handle_call_ending(code):
         await sleep()
 
 async def handle_call_in_progress(code):
-    if code == 'MO RING':
-        first_ring_event.set()
-        device_queue.put_nowait({'event': 'outgoing-ringing', 'code': code, 'number': caller})
-    elif code == 'MO CONNECTED':
-        device_queue.put_nowait({'event': 'outgoing-accepted', 'code': code, 'number': caller})
-        
+    global gate_ring_ok
+    global gate_last_urc
+    first_ring_event.set()
+    
+    gate_last_urc = code
+    
+    if code == 'MO RING' or code == 'MO CONNECTED':
+        gate_ring_ok = True
+
+    device_queue.put_nowait({'event': 'outgoing-ringing', 'code': code, 'number': caller})
     await sleep()
 
 async def handle_voltage_related_signals(code):
@@ -316,7 +377,9 @@ async def process_unsolicited(msg):
     if code == '+CDRIND':
         return await handle_call_ending(code)
     
-    if code == 'MO RING' or code == 'MO CONNECTED':
+    if code == 'MO RING' or code == 'MO CONNECTED' or \
+       code == 'BUSY' or code == 'NO CARRIER' or \
+       code == 'NO DIALTONE' or code == 'NO ANSWER':
         return await handle_call_in_progress(code)
     
     if 'POWER' in code or 'VOLTAGE' in code:

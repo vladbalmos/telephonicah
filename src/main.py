@@ -22,6 +22,7 @@ ENABLE_PIN = 8
 
 wifi_status_sms_sent = False
 last_reset = None
+sim_reset_counts = 0
 
 reset_pin = machine.Pin(RST_PIN, machine.Pin.OUT)
 reset_pin.high()
@@ -60,7 +61,14 @@ async def _reset_sim():
     webserver.logs_queue.put_nowait({'event': 'sim-reset'})
 
 async def reset_sim():
+    global sim_reset_counts
+
+    if sim_reset_counts > 10:
+        print("Resetting device due to excessive sim resets\n")
+        return machine.reset()
+
     if not last_reset:
+        sim_reset_counts += 1
         print('Reseting SIM')
         return await _reset_sim()
     
@@ -71,6 +79,7 @@ async def reset_sim():
         return
     
     print('Reseting SIM')
+    sim_reset_counts += 1
     await _reset_sim()
     
 async def toggle_enable_pin():
@@ -98,7 +107,7 @@ async def main():
         'rx': machine.Pin(RX_PIN, machine.Pin.IN),
         'timeout': 250
     }
-    
+
     reader, writer = await uart.initialize(uart_config)
     asyncio.create_task(sim800l.initialize(device_queue, debug_queue, reader, writer))
     
@@ -114,12 +123,16 @@ async def main():
         
     credit_info = ''
     last_credit_info_msg = None
+    last_event = 0
+    failed_wifi_connects = 0
+    wifi_connected = False
         
     while True:
         led.toggle()
+        now = time.ticks_ms()
         
         if last_credit_info_msg:
-            now = time.ticks_ms()
+            last_event = now
             diff = time.ticks_diff(now, last_credit_info_msg)
             if diff > 10 * 1000:
                 asyncio.create_task(sim800l.send_sms_with_lock(state['owner_number'], credit_info))
@@ -127,6 +140,7 @@ async def main():
                 last_credit_info_msg = None
             
         while not device_queue.empty():
+            last_event = now
             event = device_queue.get_nowait()
             log_event = True
 
@@ -229,12 +243,14 @@ async def main():
                     asyncio.create_task(sim800l.relay_sms(state['owner_number'], str(event['data']), event['index']))
                 
         while not debug_queue.empty():
+            last_event = now
             info = debug_queue.get_nowait()
             webserver.logs_queue.put_nowait(info)
             print('debug', info)
             
         state_modified = False
         while not command_queue.empty():
+            last_event = now
             cmd = command_queue.get_nowait()
             print('command', cmd)
             webserver.logs_queue.put_nowait(cmd)
@@ -268,13 +284,19 @@ async def main():
                     ip = state['ip']
                     port = state['port']
                     msg = f'Connected: {ip}:{port}'
+                    wifi_connected = True
                 else:
-                    error_code = webserver.wifi_status_codes[result['code']]
+                    failed_wifi_connects += 1
+                    try:
+                        error_code = webserver.wifi_status_codes[result['code']]
+                    except KeyError:
+                        error_code = 'unknown-status'
                     msg = f'Unable to connect to wifi: {error_code}'
                     
                 if not wifi_status_sms_sent:
-                    asyncio.create_task(sim800l.send_sms_with_lock(state['owner_number'], msg))
-                    wifi_status_sms_sent = True
+                    if wifi_connected or failed_wifi_connects >= 5:
+                        asyncio.create_task(sim800l.send_sms_with_lock(state['owner_number'], msg))
+                        wifi_status_sms_sent = True
             else:
                 continue
                 
@@ -285,7 +307,12 @@ async def main():
             except Exception as e:
                 print('Caught exception while writing state', e)
                 webserver.logs_queue.put_nowait({'event': 'error', 'msg': f'Exception while writing state failed {e.args[0]}'})
-
+                
+        elapsed_since_last_event = now - last_event
+        if elapsed_since_last_event > (120 * 1000):
+            print("Resetting due to inactivity. This shouldn't happen\n")
+            machine.reset()
+        
         await sleep()
     
 asyncio.run(main())

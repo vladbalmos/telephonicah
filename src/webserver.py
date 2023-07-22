@@ -2,6 +2,7 @@ import time
 import json
 import uasyncio as asyncio
 import network
+import os
     
 server_initialized = False
 command_queue = None
@@ -12,6 +13,7 @@ wlan = None
 ssid = None
 ip = None
 port = None
+wifi_connected_msg_logged = False
 
 wifi_status_codes = {
     network.STAT_IDLE: 'idle',
@@ -67,6 +69,7 @@ async def wifi_connect(_ssid, ssid_password):
     global ssid
     global ip
     global wlan
+    global wifi_connected_msg_logged
     
     ssid = _ssid
     
@@ -80,16 +83,23 @@ async def wifi_connect(_ssid, ssid_password):
         wlan.active(True)
         
     if wlan.isconnected():
+        if wifi_connected_msg_logged is False:
+            config = wlan.ifconfig()
+            ip = config[0]
+            command_queue.put_nowait({'do': 'handle-wifi-status', 'payload': {'status': True, 'ip': ip, 'port': port, 'ssid': ssid, 'password': ssid_password}})
+            print("WIFI connected")
+            wifi_connected_msg_logged = True
         return
     
-    print('Connecting to WIFI')
+    print(f'Connecting to WIFI {ssid} using {ssid_password}')
     wlan.connect(ssid, ssid_password)
     
-    max_wait = 20
+    max_wait = 10
     
     while max_wait > 0:
         status = wlan.status()
-        if status < 0 or status >= 3:
+        print(f"Wifi status is: {status}")
+        if status >= 3:
             break
         max_wait -= 1
         print('Waiting for connection')
@@ -97,15 +107,20 @@ async def wifi_connect(_ssid, ssid_password):
         
 
     status = wlan.status()
-    str_status = wifi_status_codes[status]
+    try :
+        str_status = wifi_status_codes[status]
+    except KeyError:
+        str_status = 'unknown-status'
+        
     if status != network.STAT_GOT_IP:
-        print(f'Unable to connect to WIFI. Status is {status}/{str_status}')
+        print(f'WIFI Status is {status}/{str_status}')
         command_queue.put_nowait({'do': 'handle-wifi-status', 'payload': {'status': False, 'code': status}})
         return
     
     config = wlan.ifconfig()
     ip = config[0]
     command_queue.put_nowait({'do': 'handle-wifi-status', 'payload': {'status': True, 'ip': ip, 'port': port, 'ssid': ssid, 'password': ssid_password}})
+    print("WIFI connected")
 
 def parse_params(str_params):
     params = str_params.split('&')
@@ -167,30 +182,24 @@ async def serve_index(method, _headers, _query, _body):
         with open('index.html', 'r') as file:
             allowed_callers = []
             for phone, name in state['allowed_callers'].items():
-                item = f'<li id="{phone}">{phone} - {name} <input type="hidden" name="name[]" value="{name}"><input type="hidden" name="phone[]" value="{phone}"> <a href="#" rel="{phone}" class="delete-icon" title="Șterge"></a></li>'
+                item = f'<li id="{phone}">{phone} - {name} <input type="hidden" name="name[]" value="{name}"><input type="hidden" name="phone[]" value="{phone}"> <a href="#" rel="{phone}" class="delete-icon" title="Șterge"></a></li>\n'
                 allowed_callers.append(item)
 
-            unique_log_items = {}
-            for (tstamp, item) in logs_queue.logs:
-                item = json.dumps(item)
-                unique_log_items[item] = tstamp
-                    
-            logs = []
-            sorted_items = sorted(unique_log_items.items(), key=lambda x: x[1])
-            for (item, tstamp) in sorted_items:
-                logs.append(f'{tstamp} - {item}')
-            
             while True:
                 line = file.readline()
                 if not line:
                     break
-
-                if '{allowed_callers}' in line:
-                    line = line.replace('{allowed_callers}', ''.join(allowed_callers))
-                    
-                if '{logs}' in line:
-                    line = line.replace('{logs}', '\n'.join(logs))
-                    
+                
+                if line.strip() == '{allowed_callers}':
+                    for caller in allowed_callers:
+                        writer.write(caller)
+                    continue
+                        
+                if line.strip() == '{logs}':
+                    for (tstamp, item) in logs_queue.logs:
+                        writer.write(f'{tstamp} - {item}\n')
+                    continue
+                
                 if '{current_owner}' in line:
                     line = line.replace('{current_owner}', state['owner_number'])
 
@@ -201,9 +210,21 @@ async def serve_index(method, _headers, _query, _body):
             
     return '200', 'OK', [], stream_response
 
-async def serve_update(method, headers, query, body):
+async def serve_update(method, _, query, body):
     if method != 'post':
         return '404', 'Not found', [], ''
+    
+    def stream_logs(writer):
+        try:
+            with open('fail.log', 'r') as fail_log:
+                while True:
+                    line = fail_log.readline()
+                    if not line:
+                        break
+                    
+                    writer.write(line.encode('utf8'))
+        except:
+            pass
         
     form_data = {}
     if body:
@@ -238,6 +259,15 @@ async def serve_update(method, headers, query, body):
         command_queue.put_nowait({'do': 'update-gate-number', 'payload': form_data['gate']})
     elif ('check:credit', '1') in query:
         command_queue.put_nowait({'do': 'check-credit'})
+    elif ('download:logs', '1') in query:
+        try:
+            fail_log_stat = os.stat('fail.log')
+            file_size = fail_log_stat[6]
+            response_headers = ['Content-type: text/plain\r\n', f'Content-length: {file_size}\r\n']
+            response_headers.append('Content-disposition: attachment; filename="fail.log"\r\n')
+            return '200', 'OK', response_headers, stream_logs
+        except:
+            return '404', 'Not found', [], ''
     else:
         return '403', 'Forbidden', [], 'Unauthorized update!'
     
