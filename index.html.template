@@ -108,6 +108,9 @@
             <form method="post" action="/update?check:credit=1">
                 <button type="submit">Check prepay credit</button>
             </form>
+            <form method="post" action="/update?download:logs=1">
+                <button type="submit" name="download-logs">Download fail log</button>
+            </form>
         </div>
     </div>
     <script>
