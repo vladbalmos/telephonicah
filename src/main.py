@@ -85,7 +85,7 @@ async def reset_sim():
 async def toggle_enable_pin():
     print('Toggling ENABLE PIN')
     enable_pin.high()
-    await sleep(50)
+    await sleep(500)
     enable_pin.low()
 
 async def main():
