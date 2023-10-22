@@ -1,3 +1,5 @@
+# UPDATE
+The original version of this project is on branch `original-call-proxy`. The `master` branch doesn't forward calls to a designated number, instead it activates an external connected remote control using the signal port (see the schematic in the `hw` folder for the signal port pinout).
 # Telephonicah
 
 This repo contains firmware and hardware related resources (schematic, pcb & enclosure 3d models) for a device used to proxy GSM calls to a designated number (ex: parking barrier gate).
