@@ -234,8 +234,7 @@ async def open_gate(gate_number, caller):
         _, _, result = await send('ATH', timeout=5, expect_single_line_response=False)
         await handle_call_ending(result)
         await sleep(500)
-        await call_gate(gate_number, caller)
-
+        # await call_gate(gate_number, caller)
     except Exception as e:
         print(e)
     finally:
