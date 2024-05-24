@@ -45,8 +45,9 @@ Build micropython:
     make -j4 BOARD=PICO_W clean
     make -j4 BOARD=PICO_W
     
-Init:
+After building copy the micropython firmware to a pico
 
+Init:
     ./setup.sh
     # edit src/phone_numbers.py and add phone numbers
     make build
@@ -65,6 +66,8 @@ Build
 
 ## Windows
 Build micropython https://github.com/micropython/micropython/tree/master/ports/windows
+
+After building copy the micropython firmware to a pico
 
 Edit `build.ps1` and change the $PORT variable to the correct serial port (ex: com1)
 Init:
