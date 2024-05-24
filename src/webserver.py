@@ -206,6 +206,9 @@ async def serve_index(method, _headers, _query, _body):
                 if '{gate}' in line:
                     line = line.replace('{gate}', state['gate_number'])
                     
+                if '{ep-toggle-duration}' in line:
+                    line = line.replace('{ep-toggle-duration}', str(state['ep_toggle_duration']))
+                    
                 writer.write(line.encode('utf8'))
             
     return '200', 'OK', [], stream_response
@@ -257,6 +260,11 @@ async def serve_update(method, _, query, body):
             return '500', 'Internal Server Error', [], 'Missing gate number!'
 
         command_queue.put_nowait({'do': 'update-gate-number', 'payload': form_data['gate']})
+    elif ('enable-pin-toggle-duration', '1') in query:
+        if not 'ep-toggle-duration' in form_data or not len(form_data['ep-toggle-duration']):
+            return '500', 'Internal Server Error', [], 'Missing pin toggle duration!'
+        
+        command_queue.put_nowait({'do': 'update-ep-toggle-duration', 'payload': form_data['ep-toggle-duration']})
     elif ('check:credit', '1') in query:
         command_queue.put_nowait({'do': 'check-credit'})
     elif ('download:logs', '1') in query:

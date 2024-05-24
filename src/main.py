@@ -33,6 +33,7 @@ enable_pin.low()
 state = {
     'gate_number': phone_numbers.GATE_NUMBER,
     'owner_number': phone_numbers.OWNER_NUMBER,
+    'ep_toggle_duration': 500,
     'allowed_callers': phone_numbers.ALLOWED_CALLERS.copy(),
     'ssid': None,
     'ssid_password': None
@@ -82,10 +83,10 @@ async def reset_sim():
     sim_reset_counts += 1
     await _reset_sim()
     
-async def toggle_enable_pin():
-    print('Toggling ENABLE PIN')
+async def toggle_enable_pin(duration = 500):
+    print('Toggling ENABLE PIN for', duration, 'ms')
     enable_pin.high()
-    await sleep(500)
+    await sleep(duration)
     enable_pin.low()
 
 async def main():
@@ -172,7 +173,7 @@ async def main():
             if event['event'] == 'incoming-call':
                 caller = event['caller']
                 if caller in state['allowed_callers']:
-                    asyncio.create_task(toggle_enable_pin())
+                    asyncio.create_task(toggle_enable_pin(int(state['ep_toggle_duration'])))
                     asyncio.create_task(sim800l.open_gate(state['gate_number'], caller))
                 else:
                     await sim800l.decline_call()
@@ -266,6 +267,12 @@ async def main():
             elif cmd['do'] == 'update-gate-number':
                 state['gate_number'] = cmd['payload']
                 state_modified = True
+            elif cmd['do'] == 'update-ep-toggle-duration':
+                try:
+                    state['ep_toggle_duration'] = int(cmd['payload'])
+                    state_modified = True
+                except:
+                    pass
             elif cmd['do'] == 'update-owner-number':
                 state['owner_number'] = cmd['payload']
                 state_modified = True

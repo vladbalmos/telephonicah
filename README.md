@@ -24,14 +24,17 @@ Features:
         * query wifi status
     * Relay received SMS to designated owner number
     * Web UI
+    
+After the devices connects to WIFI it will bind the webserver to port 8080 and a SMS containing the server's ip address and port will be sent to the administrator's phone number
 
 # System requirements
 * micropython
 * ampy (pip3 install adafruit-ampy)
 * minicom (optional)
 
-
 # Development
+
+## Linux
 Build micropython:
 
     cd [mycropython-dir]
@@ -56,10 +59,40 @@ Clean
 
     make clean
     
-Upload
-
-    make upload
-    
 Build
 
     make build
+
+## Windows
+Build micropython https://github.com/micropython/micropython/tree/master/ports/windows
+
+Edit `build.ps1` and change the $PORT variable to the correct serial port (ex: com1)
+Init:
+
+    .\setup.ps1
+    # edit src/phone_numbers.py and add phone numbers
+    .\build.ps1 -Command build
+    
+Run:
+
+    .\build.ps1 -Command run
+
+Clean:
+
+    .\build.ps1 -Command clean
+    
+Build:
+
+    .\build.ps1 -Command build
+
+List files on pico:
+
+    .\build.ps1 -Command list
+    
+Copy file from pico:
+
+    .\build.ps1 -Command get -Argument [filename]
+    
+Copy file to pico:
+
+    .\build.ps1 -Command send -Argument [filename]
