@@ -8,6 +8,7 @@ MAX_LOCK_DURATION_S = 30
 
 device_queue = None
 debug_queue = None
+debug_mode = False
 reader = None
 writer = None
 
@@ -554,6 +555,11 @@ async def do_read():
 
         if len(line) == 0:
             continue
+        
+        if debug_mode:
+            print(line)
+            continue
+            
 
         if is_unsolicited(line):
             if not is_ignored_urc(line):
@@ -579,6 +585,16 @@ async def handle_urc():
         print('U', urc)
 
         await process_unsolicited(urc)
+        
+def toggle_debug_mode(state):
+    global debug_mode
+    debug_mode = state
+    
+async def send_at_command(cmd):
+    print('Sending command', cmd)
+    async with uart_lock:
+        await send(cmd, no_wait=True)
+
     
 async def initialize(_device_queue, _debug_queue, _reader, _writer):
     global device_queue
@@ -597,5 +613,7 @@ async def initialize(_device_queue, _debug_queue, _reader, _writer):
     asyncio.create_task(handle_urc())
     
     while True:
-        await query_state()
+        if not debug_mode:
+            await query_state()
+
         await sleep(1000)

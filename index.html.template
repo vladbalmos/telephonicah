@@ -118,6 +118,20 @@
             <form method="post" action="/update?download:logs=1">
                 <button type="submit" name="download-logs">Download fail log</button>
             </form>
+            <form method="post" action="/update?debug:mode=1">
+                <button type="submit" name="submit">Enter debug mode</button>
+            </form>
+            <form method="post" action="/update?deleteallsms=1">
+                <button type="submit" name="submit">Delete all SMS</button>
+            </form>
+            <form method="post" action="/update?reset=1">
+                <button type="submit" name="submit">Reset device</button>
+            </form>
+            <p>Debug mode: {debug_mode}</p>
+            <form method="post" action="/update?sendat=1">
+                <textarea name="atcommand"></textarea>
+                <button type="submit" name="submit">Send AT command</button>
+            </form>
         </div>
     </div>
     <script>

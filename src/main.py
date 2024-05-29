@@ -257,7 +257,17 @@ async def main():
             webserver.logs_queue.put_nowait(cmd)
             if cmd['do'] == 'notif-wifi-connecting':
                 led_notif.start_blink_red()
-                
+            
+            if cmd['do'] == 'reset':
+                print('Reseting...')
+                machine.reset()
+            if cmd['do'] == 'enter-debug':
+                sim800l.toggle_debug_mode(True)
+            if cmd['do'] == 'delete-all-sms':
+                print('Deleting all sms')
+                await sim800l.delete_sms(aquire_lock=True, delete_all=True)
+            if cmd['do'] == 'send-at-command':
+                await sim800l.send_at_command(cmd['payload']);
             if cmd['do'] == 'update-allowed-callers':
                 new_dict = {}
                 for name, number in cmd['payload']:
@@ -316,7 +326,7 @@ async def main():
                 webserver.logs_queue.put_nowait({'event': 'error', 'msg': f'Exception while writing state failed {e.args[0]}'})
                 
         elapsed_since_last_event = now - last_event
-        if elapsed_since_last_event > (120 * 1000):
+        if elapsed_since_last_event > (120 * 1000) and not sim800l.debug_mode:
             print("Resetting due to inactivity. This shouldn't happen\n")
             machine.reset()
         

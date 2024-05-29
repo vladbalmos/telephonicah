@@ -6,6 +6,7 @@ import os
     
 server_initialized = False
 command_queue = None
+debug_mode = False
 state = None
 start_ticks = time.ticks_ms()
 
@@ -137,7 +138,10 @@ def parse_params(str_params):
             continue
         
         value = '='.join(p_segments)
-        query_params.append((name, url_decode(value)))
+        if name != 'atcommand':
+            query_params.append((name, url_decode(value)))
+        else:
+            query_params.append((name, value))
         
     return query_params
 
@@ -154,12 +158,14 @@ def parse_uri(uri):
     return uri, query_params
 
 def parse_form_data(str_form):
-    decoded_form_data = parse_params(url_decode(str_form))
+    url_decoded_form = url_decode(str_form)
+    decoded_form_data = parse_params(url_decoded_form)
     
     data = {}
     for item in decoded_form_data:
         key, value = item
-        value = url_decode(value.strip())
+        if key != 'atcommand':
+            value = url_decode(value.strip())
         if '[]' in key:
             key = key[0:-2]
             
@@ -190,6 +196,12 @@ async def serve_index(method, _headers, _query, _body):
                 if not line:
                     break
                 
+                if '{debug_mode}' in line:
+                    value = '0'
+                    if debug_mode:
+                        value = '1'
+                    line = line.replace('{debug_mode}', value)
+                
                 if line.strip() == '{allowed_callers}':
                     for caller in allowed_callers:
                         writer.write(caller)
@@ -214,6 +226,7 @@ async def serve_index(method, _headers, _query, _body):
     return '200', 'OK', [], stream_response
 
 async def serve_update(method, _, query, body):
+    global debug_mode
     if method != 'post':
         return '404', 'Not found', [], ''
     
@@ -276,6 +289,17 @@ async def serve_update(method, _, query, body):
             return '200', 'OK', response_headers, stream_logs
         except:
             return '404', 'Not found', [], ''
+    elif ('reset', '1') in query:
+        command_queue.put_nowait({'do': 'reset'})
+    elif ('debug:mode', '1') in query:
+        debug_mode = True
+        command_queue.put_nowait({'do': 'enter-debug'})
+    elif ('deleteallsms', '1') in query:
+        command_queue.put_nowait({'do': 'delete-all-sms'})
+    elif ('sendat', '1') in query and debug_mode:
+        if 'atcommand' in form_data:
+            at_cmd = form_data['atcommand'].strip()
+            command_queue.put_nowait({'do': 'send-at-command', 'payload': at_cmd})
     else:
         return '403', 'Forbidden', [], 'Unauthorized update!'
     
