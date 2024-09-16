@@ -11,7 +11,6 @@ import led_notif
 import webserver
 
 SLEEP_MS = 50
-RESET_SIM_COOLDOWN_S = 30
 
 RST_PIN = 3
 TX_PIN = 4
@@ -20,6 +19,8 @@ RED_LED_PIN = 6
 GREEN_LED_PIN = 7
 ENABLE_PIN = 8
 
+watchdog = machine.WDT(timeout=8000)
+watchdog.feed()
 wifi_status_sms_sent = False
 last_reset = None
 sim_reset_counts = 0
@@ -51,38 +52,6 @@ available_commands = [
 async def sleep(ms = SLEEP_MS):
     return await asyncio.sleep_ms(ms)
 
-async def _reset_sim():
-    global last_reset
-
-    reset_pin.low()
-    await sleep(200)
-    reset_pin.high()
-    last_reset = time.ticks_ms()
-    led_notif.toggle_red(False)
-    webserver.logs_queue.put_nowait({'event': 'sim-reset'})
-
-async def reset_sim():
-    global sim_reset_counts
-
-    if sim_reset_counts > 10:
-        print("Resetting device due to excessive sim resets\n")
-        return machine.reset()
-
-    if not last_reset:
-        sim_reset_counts += 1
-        print('Reseting SIM')
-        return await _reset_sim()
-    
-    now = time.ticks_ms()
-    diff = int(time.ticks_diff(now, last_reset) / 1000)
-    
-    if diff < RESET_SIM_COOLDOWN_S:
-        return
-    
-    print('Reseting SIM')
-    sim_reset_counts += 1
-    await _reset_sim()
-    
 async def toggle_enable_pin(duration = 500):
     print('Toggling ENABLE PIN for', duration, 'ms')
     enable_pin.high()
@@ -110,8 +79,9 @@ async def main():
     }
 
     reader, writer = await uart.initialize(uart_config)
-    asyncio.create_task(sim800l.initialize(device_queue, debug_queue, reader, writer))
+    asyncio.create_task(sim800l.initialize(device_queue, debug_queue, reader, writer, watchdog))
     
+    watchdog.feed()
     try:
         with open('state.json', 'r') as state_file:
             contents = state_file.read()
@@ -127,11 +97,22 @@ async def main():
     last_event = 0
     failed_wifi_connects = 0
     wifi_connected = False
+    first_time_initialized = False
+    loop_start = time.ticks_ms()
         
+    watchdog.feed()
+
     while True:
         led.toggle()
         now = time.ticks_ms()
         
+        if not first_time_initialized:
+            elapsed_initalization = time.ticks_diff(now, loop_start)
+            
+            if elapsed_initalization < (60 * 1000):
+                print("Feeding watch dog while initializing")
+                watchdog.feed()
+
         if last_credit_info_msg:
             last_event = now
             diff = time.ticks_diff(now, last_credit_info_msg)
@@ -157,11 +138,10 @@ async def main():
                 log_event = False
                 led_notif.start_blink_red()
                 print('device', event)
-            elif event['event'] == 'sim-offline':
-                led_notif.toggle_red(True)
-                await reset_sim()
-                print('device', event)
             elif event['event'] == 'initialized':
+                first_time_initialized = True
+                print("Feeding watch dog")
+                watchdog.feed()
                 log_event = False
                 await led_notif.stop_blink_red()
             else:
@@ -183,6 +163,7 @@ async def main():
                     msg_details = event['data'][2] or []
                     msg_from_owner = False
                     msg_from_credit_info = False
+                    await sim800l.delete_sms(event['index'])
                     for d in msg_details:
                         if state['owner_number'] in d:
                             msg_from_owner = True
@@ -201,7 +182,6 @@ async def main():
                             msg = '\n'.join(available_commands)
                             asyncio.create_task(sim800l.send_sms_with_lock(state['owner_number'], msg))
                         if msg == 'get:credit':
-                            await sim800l.delete_sms(event['index'])
                             asyncio.create_task(sim800l.check_credit())
                         elif msg == 'delete:sms':
                             await sim800l.delete_sms(aquire_lock=True, delete_all=True)
@@ -217,12 +197,10 @@ async def main():
                             except:
                                 print('No state to clear')
                         elif msg == 'wifi:status':
-                            await sim800l.delete_sms(event['index'])
                             wifi_status, details = webserver.status()
                             msg = f'Status: {wifi_status}\n Details: {json.dumps(details)}'
                             asyncio.create_task(sim800l.send_sms_with_lock(state['owner_number'], msg))
                         elif 'wifi:connect' in msg:
-                            await sim800l.delete_sms(event['index'])
                             segments = original_msg.strip().split('\n')
                             if len(segments) != 3:
                                 continue
@@ -236,12 +214,6 @@ async def main():
                         msg = '\n'.join(msg[1:])
                         credit_info = f'{credit_info}{msg}'
                         last_credit_info_msg = time.ticks_ms()
-                        await sim800l.delete_sms(event['index'])
-                    else:
-                        asyncio.create_task(sim800l.relay_sms(state['owner_number'], str(event['data']), event['index']))
-                else:
-                    await sim800l.relay_sms(state['owner_number'], str(event['data']), event['index'])
-                    asyncio.create_task(sim800l.relay_sms(state['owner_number'], str(event['data']), event['index']))
                 
         while not debug_queue.empty():
             last_event = now

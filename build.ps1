@@ -5,7 +5,7 @@ param (
 )
 
 $SRC_DIR = "src"
-$PORT = "com3"
+$PORT = "com9"
 
 
 function send-everything {

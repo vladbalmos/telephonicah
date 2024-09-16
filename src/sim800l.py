@@ -1,4 +1,5 @@
 import uasyncio as asyncio
+from machine import WDT
 import time
 import os
 from dynamic_queue import Queue
@@ -6,6 +7,7 @@ from dynamic_queue import Queue
 SLEEP_MS = 50
 MAX_LOCK_DURATION_S = 30
 
+watchdog = None
 device_queue = None
 debug_queue = None
 debug_mode = False
@@ -103,9 +105,12 @@ def is_unsolicited(msg):
 async def send_sms(number, message):
     print('sending sms to', number, message)
     await send('AT+CMGF=1')
+    watchdog.feed()
     await send(f'AT+CMGS="{number}"', no_wait=True)
     sms = message + '\r\n' + chr(26)
+    watchdog.feed()
     await send(sms, timeout=30)
+    watchdog.feed()
     
 async def send_sms_with_lock(number, message):
     device_queue.put_nowait({'event': 'outgoing-event'})
@@ -129,9 +134,12 @@ async def relay_sms(number, message, msg_index):
     print('relaying sms to', number, message, msg_index)
     global outgoing_operation_in_progress
     async with uart_lock:
+        watchdog.feed()
         outgoing_operation_in_progress = True
         await delete_sms(msg_index, aquire_lock=False)
+        watchdog.feed()
         await send_sms(number, message)
+        watchdog.feed()
         outgoing_operation_in_progress = False
         
 async def check_credit():
@@ -436,6 +444,7 @@ async def query_state():
 
     async with uart_lock:
         cmd_status, _, result = await send('AT+CPIN?', timeout=2)
+        print(cmd_status, _, result)
         
         if is_busy():
             return
@@ -595,12 +604,14 @@ async def send_at_command(cmd):
         await send(cmd, no_wait=True)
 
     
-async def initialize(_device_queue, _debug_queue, _reader, _writer):
+async def initialize(_device_queue, _debug_queue, _reader, _writer, _watchdog):
+    global watchdog
     global device_queue
     global debug_queue
     global reader
     global writer
 
+    watchdog = _watchdog
     device_queue = _device_queue
     debug_queue = _debug_queue
     
