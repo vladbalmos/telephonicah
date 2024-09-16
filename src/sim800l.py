@@ -235,13 +235,12 @@ async def open_gate(gate_number, caller):
         _, _, result = await send('ATH', timeout=5, expect_single_line_response=False)
         await handle_call_ending(result)
         await sleep(500)
-        # await call_gate(gate_number, caller)
     except Exception as e:
         print(e)
     finally:
         await sleep(1000)
         outgoing_operation_in_progress = False
-        uart_lock.release()
+        uart_lock.release() if uart_lock.locked() else None
         
 async def decline_call():
     try:
@@ -251,7 +250,7 @@ async def decline_call():
         print(e)
     finally:
         await sleep(1000)
-        uart_lock.release()
+        uart_lock.release() if uart_lock.locked() else None
     
 
 async def handle_incoming_call(code, data):
