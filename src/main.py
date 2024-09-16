@@ -43,7 +43,6 @@ state = {
 available_commands = [
     'get:credit',
     'delete:sms',
-    'reset:sim',
     'clear:state',
     'wifi:status',
     'wifi:connect\nssid\npassword'
@@ -185,9 +184,6 @@ async def main():
                             asyncio.create_task(sim800l.check_credit())
                         elif msg == 'delete:sms':
                             await sim800l.delete_sms(aquire_lock=True, delete_all=True)
-                        elif msg == 'reset:sim':
-                            print('Reseting SIM')
-                            await _reset_sim()
                         elif msg == 'clear:state':
                             print('Clearing state and rebooting')
                             try:
